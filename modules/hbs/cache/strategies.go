@@ -15,13 +15,20 @@
 package cache
 
 import (
-	"github.com/open-falcon/falcon-plus/common/model"
-	"github.com/open-falcon/falcon-plus/modules/hbs/db"
-	"github.com/toolkits/container/set"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/toolkits/container/set"
+
+	"github.com/open-falcon/falcon-plus/common/model"
+	"github.com/open-falcon/falcon-plus/modules/hbs/db"
+	"github.com/open-falcon/falcon-plus/modules/hbs/g"
 )
 
 type SafeStrategies struct {
@@ -61,6 +68,7 @@ func GetBuiltinMetrics(hostname string) ([]*model.BuiltinMetric, error) {
 	}
 
 	// 根据gids，获取绑定的所有tids
+	// 这里把绑定到host group上的模板获取出来汇总监控项
 	tidSet := set.NewIntSet()
 	for _, gid := range gids {
 		tids, exists := GroupTemplates.GetTemplateIds(gid)
@@ -97,7 +105,20 @@ func GetBuiltinMetrics(hostname string) ([]*model.BuiltinMetric, error) {
 		tidStrArr[i] = strconv.Itoa(tidSlice[i])
 	}
 
-	return db.QueryBuiltinMetrics(strings.Join(tidStrArr, ","))
+	metricsFromDB, err := db.QueryBuiltinMetrics(strings.Join(tidStrArr, ","))
+	if err != nil {
+		return nil, err
+	}
+
+	metricsFromAppTree, err := QueryMetricFromAppTree(hostname)
+	if err != nil {
+		return nil, err
+	}
+	var metrics []*model.BuiltinMetric
+	// TODO metrics去重
+	metrics = append(metrics, metricsFromDB...)
+	metrics = append(metrics, metricsFromAppTree...)
+	return metrics, nil
 }
 
 func ParentIds(allTpls map[int]*model.Template, tid int) (ret []int) {
@@ -133,4 +154,26 @@ func ParentIds(allTpls map[int]*model.Template, tid int) (ret []int) {
 	}
 
 	return desc
+}
+
+// QueryMetricFromAppTree
+// 服务树接口获取监控项, 夜莺把架构简化了, 没有hbs, 直接从api获取监控项, 也是在服务树节点上绑定监控模板
+// 目前为止所有的服务树设计, 一个主机只能绑定到一个服务树节点上。
+func QueryMetricFromAppTree(hostname string) ([]*model.BuiltinMetric, error) {
+	addr := g.Config().AppTree
+	resp, err := http.Get(fmt.Sprintf("%s/api/v1/tree/metrics?hostname=%s", addr, hostname))
+	if err != nil {
+		return nil, err
+	}
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var metrics []*model.BuiltinMetric
+	err = json.Unmarshal(b, &metrics)
+	if err != nil {
+		return nil, err
+	}
+	return metrics, nil
 }

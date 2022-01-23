@@ -15,8 +15,9 @@
 package db
 
 import (
-	"github.com/open-falcon/falcon-plus/common/model"
 	"log"
+
+	"github.com/open-falcon/falcon-plus/common/model"
 )
 
 func QueryGroupTemplates() (map[int][]int, error) {
@@ -76,6 +77,8 @@ func QueryTemplates() (map[int]*model.Template, error) {
 
 // 一个机器ID对应了多个模板ID
 func QueryHostTemplateIds() (map[int][]int, error) {
+	// TODO cache host templateIds from app tree
+	// 模板的创建操作和绑定操作还是要在服务树里, 这里保留了原生的模板获取操作, 再把服务树绑定的模板id插入进来
 	ret := make(map[int][]int)
 	rows, err := DB.Query("select a.tpl_id, b.host_id from grp_tpl as a inner join grp_host as b on a.grp_id=b.grp_id")
 	if err != nil {

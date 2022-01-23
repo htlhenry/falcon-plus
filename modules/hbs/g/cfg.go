@@ -16,9 +16,10 @@ package g
 
 import (
 	"encoding/json"
-	"github.com/toolkits/file"
 	"log"
 	"sync"
+
+	"github.com/toolkits/file"
 )
 
 type HttpConfig struct {
@@ -35,6 +36,7 @@ type GlobalConfig struct {
 	Listen    string      `json:"listen"`
 	Trustable []string    `json:"trustable"`
 	Http      *HttpConfig `json:"http"`
+	AppTree   string      `json:"appTree"`
 }
 
 var (
